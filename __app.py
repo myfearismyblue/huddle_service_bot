@@ -1,6 +1,9 @@
 # initial app
 import logging
 
+import sys
+sys.path.append('../venv/lib/python3.8/site-packages')
+
 from aiogram import Bot, Dispatcher, executor, types
 
 from tokens import HUDDLE_SERVICE_BOT_TOKEN as BOT_TOKEN
