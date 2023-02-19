@@ -13,6 +13,19 @@ if __name__ == '__main__':
     async def start_handler(message: types.Message):
         await message.answer(f"Hello, {message.from_user.id}")
 
+    @dp.message_handler()
+    async def echo_handler(message: types.Message):
+        await message.answer(f"From message handler: {message.text}")
+
+    @dp.inline_handler()
+    async def custom_handler(query):
+        text = 'Inline greetings'
+        r_sum = types.InlineQueryResultArticle(
+            id='First id', title="Hint",
+            description="Description",
+            input_message_content=types.InputTextMessageContent(message_text=text))
+        await bot.answer_inline_query(query.id, [r_sum])
+
     async def on_startup(_):
         logging.warning('Bot is running')
 
