@@ -2,6 +2,9 @@
 import logging
 
 import sys
+
+from vk_services.services import handle_vk_by_message
+
 sys.path.append('../venv/lib/python3.8/site-packages')
 
 from aiogram import Bot, Dispatcher, executor, types
@@ -15,6 +18,11 @@ if __name__ == '__main__':
     @dp.message_handler(commands=['start', 'help'])
     async def start_handler(message: types.Message):
         await message.answer(f"Hello, {message.from_user.id}")
+
+    @dp.message_handler(commands=['milonga', 'old'])
+    async def vk_handler(message: types.Message):
+        resp = handle_vk_by_message(message)
+        await message.answer(f"{resp}")
 
     @dp.message_handler()
     async def echo_handler(message: types.Message):
