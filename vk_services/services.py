@@ -1,4 +1,6 @@
 import json
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from logging import warning
 from typing import Dict, List
 
@@ -6,102 +8,180 @@ import requests as requests
 
 from aiogram import types
 
-from vk_services.vk_container import domain, access_token, user_id
-from vk_services.vk_exceptions import BadRequestException, NonRegularPostResponse
+from .vk_container import domain, access_token, user_id
+from .vk_exceptions import BadRequestException, NonRegularPostResponse
 
 
-def _fetch_pretty_json(vk_query, indent=4):
-    """Fetches response and gets text as pretty json from it"""
-    response = requests.get(vk_query)
-    data = response.text
-    json_string = json.dumps(json.loads(data), indent=indent, ensure_ascii=False).encode('utf8')
-    return json_string
-
-
-def _fetch_json(vk_query):
-    response = requests.get(vk_query)
-    return response.json()
-
-def _build_vk_query(domain_id: str):
-    vk_query = f"{domain}/wall.get?access_token={access_token}&user_id={user_id}&" \
-               f"domain={domain_id}&count={1}&v=5.84"
-    return vk_query
-
-
-def _presentate_milongas_or_err(data: Dict):
-    """Extract polling answers from post attachment, sorts with milonga rate and returns formatted string.
-    If error occurred while responding or can't find milongas inside valid response raises corresponding exception
+class GroupDomainNameAliases:
     """
-    if 'error' in data:
-        msg = data['error']['error_msg']
-        raise BadRequestException(f'Error while requesting vk api: {msg}')
-    try:
-        milongas: list = data['response']['items'][0]['attachments'][0]['poll']['answers']  # list of milongas
-        milongas.sort(key=lambda _: _['votes'], reverse=True)
+    Alternative names for vk groups names
+    Usage:
+    {"group_name1": frozenset(("alias_1", "alias_2")),
+     "group_name2": frozenset(("alias_3", "alias_4")),
+    })
+    """
+
+    _storage = {"milonga": frozenset(("milonga", "mil")),
+                "oldclothers": frozenset(("old", "darom")),
+                }
+
+    @classmethod
+    def __setitem__(cls, key, value):
+        cls._storage.__setitem__(key, value)
+
+    @classmethod
+    def __contains__(cls, item):
+        return cls._storage.__contains__(item)
+
+    @classmethod
+    def __iter__(cls):
+        return cls._storage.__iter__()
+
+    @classmethod
+    def __getitem__(cls, item):
+        return cls._storage.__getitem__(item)
+
+    @classmethod
+    def as_list(cls) -> List[str]:
+        """Returns all aliases defined in self._storage. Each element of the return is unique."""
+        reverse_aliases = {v: k for k, v in cls._storage.items()}
+        tmp = list(reverse_aliases.keys())
+        vk_group_aliases = set()
+        [vk_group_aliases.update(set_) for set_ in tmp]
+        return list(vk_group_aliases)
+
+    @classmethod
+    def get_groups_by_alias(cls, alias: str) -> List[str]:
+        """Founds group names by a given alias.
+        Returns these names as list of strings"""
+        assert isinstance(alias, str)
+        ret = set()
+        for group in cls._storage:
+            if alias in cls._storage[group]:
+                ret.update((group, ))
+
+        return list(ret)
+
+
+class VKAnswerPrepareBaseStrategy(ABC):
+    """Base class for vk responses handle strategies"""
+    @abstractmethod
+    def prepare_answer(self, data):
+        ...
+
+
+class MilongaPrepareStrategy(VKAnswerPrepareBaseStrategy):
+    """In case of listening daily milongas group"""
+
+    @classmethod
+    def prepare_answer(cls, data: Dict) -> str:
+        try:
+            group_resp: str = cls._presentate_milongas_or_err(data)
+        except (BadRequestException, NonRegularPostResponse) as e:
+            warning(e)
+            group_resp = 'No result for milongas. See terminal log.'
+        return group_resp
+
+    @classmethod
+    def _presentate_milongas_or_err(cls, data: Dict):
+        """Extract polling answers from post attachment, sorts with milonga rate and returns formatted string.
+        If error occurred while responding or can't find milongas inside valid response raises corresponding exception
+        """
+        if 'error' in data:
+            msg = data['error']['error_msg']
+            raise BadRequestException(f'Error while requesting vk api: {msg}')
+        try:
+            milongas: list = data['response']['items'][0]['attachments'][0]['poll']['answers']  # list of milongas
+            milongas.sort(key=lambda _: _['votes'], reverse=True)
+            ret = ''
+            for milonga in milongas:
+                assert isinstance(milonga, Dict)
+                rate = milonga['rate']
+                name = milonga['text']
+                votes = milonga['votes']
+                ret = ''.join((ret, f'\n{name}\n{rate}% - {votes} чел.'))
+            return ret
+        except (KeyError, IndexError) as e:
+            raise NonRegularPostResponse(f'Something went wrong while parsing milongas. '
+                                         f'Expected structure: [\'response\'][\'items\'][0][\'attachments\'][0]'
+                                         f'[\'poll\'][\'answers\'][0...][\'rate\'] | [\' votes\'] | [\'text\']') from e
+
+
+class OldclothersPrepareStrategy(VKAnswerPrepareBaseStrategy):
+    """In case of listening free oldstuff  group"""
+
+    @classmethod
+    def prepare_answer(cls, data: Dict) -> str:
+        try:
+            group_resp: str = cls._presentate_old_or_err(data)
+        except (BadRequestException, NonRegularPostResponse) as e:
+            warning(e)
+            group_resp = 'No result for oldclothers. See terminal log.'
+        return group_resp
+
+    @classmethod
+    def _presentate_old_or_err(cls, data: Dict):
+        """Extracts text from the last post of oldclothers group
+        """
+        if 'error' in data:
+            msg = data['error']['error_msg']
+            raise BadRequestException(f'Error while requesting vk api: {msg}')
+        try:
+            post_text: str = data['response']['items'][0]['text']  # text of post
+            return post_text
+        except (KeyError, IndexError) as e:
+            raise NonRegularPostResponse(f'Something went wrong while parsing post. '
+                                            f'Expected structure: [\'response\'][\'items\'][0][\'text\']') from e
+
+
+class VKAnswerPrepareStrategyRegister:
+    """Register of various strategies to handle vk answer."""
+    _storage = {'milonga': MilongaPrepareStrategy,
+                'oldclothers': OldclothersPrepareStrategy
+    }
+
+    @classmethod
+    def get_strategy_by_group_name(cls, group_name: str) -> type(VKAnswerPrepareBaseStrategy):
+        assert cls._storage.keys() == GroupDomainNameAliases._storage.keys()   # FIXME
+        return cls._storage[group_name]
+
+
+class VKHandler:
+    def __call__(self, message: types.Message):
+        return self.handle_vk_by_message(message)
+
+    def handle_vk_by_message(self, message: types.Message):
         ret = ''
-        for milonga in milongas:
-            assert isinstance(milonga, Dict)
-            rate = milonga['rate']
-            name = milonga['text']
-            votes = milonga['votes']
-            ret = ''.join((ret, f'\n{name}\n{rate}% - {votes} чел.'))
+        group_resp = ''
+
+        # prepare keywords
+        for key_word in message.text.split(sep=' '):
+            alias = key_word[1:]
+        # prepare query by keyword and get response
+            if alias in GroupDomainNameAliases.as_list():
+                groups_names = GroupDomainNameAliases.get_groups_by_alias(alias)
+                vk_query = self._build_vk_query(groups_names[0])          # FIXME: only the first group
+                data = self._fetch_json(vk_query)
+                # presentate response
+                prepare_strategy: VKAnswerPrepareBaseStrategy = \
+                    VKAnswerPrepareStrategyRegister.get_strategy_by_group_name(groups_names[0])
+                group_resp = prepare_strategy.prepare_answer(data)
+
+            ret = '\n'.join((ret, group_resp))
         return ret
-    except (KeyError, IndexError) as e:
-        raise NonRegularPostResponse(f'Something went wrong while parsing milongas. '
-                                        f'Expected structure: [\'response\'][\'items\'][0][\'attachments\'][0]'
-                                        f'[\'poll\'][\'answers\'][0...][\'rate\'] | [\' votes\'] | [\'text\']') from e
 
+    def _fetch_pretty_json(self, vk_query, indent=4):
+        """Fetches response and gets text as pretty json from it"""
+        response = requests.get(vk_query)
+        data = response.text
+        json_string = json.dumps(json.loads(data), indent=indent, ensure_ascii=False).encode('utf8')
+        return json_string
 
-def _presentate_old_or_err(data: Dict):
-    """Extracts text from the last post of oldclothers group
-    """
-    if 'error' in data:
-        msg = data['error']['error_msg']
-        raise BadRequestException(f'Error while requesting vk api: {msg}')
-    try:
-        post_text: list = data['response']['items'][0]['text']  # text of post
-        return post_text
-    except (KeyError, IndexError) as e:
-        raise NonRegularPostResponse(f'Something went wrong while parsing post. '
-                                        f'Expected structure: [\'response\'][\'items\'][0][\'text\']') from e
+    def _fetch_json(self, vk_query):
+        response = requests.get(vk_query)
+        return response.json()
 
-
-class GroupDomainNameAliases(dict):
-    """Alternative names for vk groups names"""
-
-    def __setitem__(self, key, value):
-        if not (isinstance(key, str) and isinstance(value, List)):
-            raise ValueError(f'Wrong aliases provided: {key, value}')
-        super().__setitem__(key, value)
-
-
-aliases = GroupDomainNameAliases({"milonga": frozenset(("milonga", "mil")),
-                                  "oldclothers": frozenset(("old", "darom")),
-                                  })
-reverse_aliases = {v: k for k, v in aliases.items()}
-
-
-def handle_vk_by_message(message: types.Message):
-    ret = ''
-    group_resp = ''
-    for key_word in message.text.split(sep=' '):
-        if key_word[1:] in aliases['milonga']:
-            vk_query = _build_vk_query('milonga')
-            data = _fetch_json(vk_query)
-            try:
-                group_resp: str = _presentate_milongas_or_err(data)
-            except (BadRequestException, NonRegularPostResponse) as e:
-                warning(e)
-                group_resp = 'No result for milongas. See terminal log.'
-
-        if key_word[1:] in aliases['oldclothers']:
-            vk_query = _build_vk_query('oldclothers')
-            data = _fetch_json(vk_query)
-            try:
-                group_resp: str = _presentate_old_or_err(data)
-            except (BadRequestException, NonRegularPostResponse) as e:
-                warning(e)
-                group_resp = 'No result for oldclothers. See terminal log.'
-
-        ret = '\n'.join((ret, group_resp))
-        return ret
+    def _build_vk_query(self, domain_id: str):
+        vk_query = f"{domain}/wall.get?access_token={access_token}&user_id={user_id}&" \
+                   f"domain={domain_id}&count={1}&v=5.84"
+        return vk_query
