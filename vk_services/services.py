@@ -1,5 +1,6 @@
 import json
 from abc import ABC, abstractmethod
+from collections import namedtuple
 from dataclasses import dataclass
 from logging import warning
 from typing import Dict, List
@@ -63,6 +64,13 @@ class GroupDomainNameAliases:
         return list(ret)
 
 
+@dataclass
+class BotPost:
+    """DTO to be given to handler to send user"""
+    text: str
+    photo_urls: List[str]
+
+
 class VKGroupGrabber:
 
     @classmethod
@@ -94,18 +102,18 @@ class VKGroupGrabber:
         return data
 
     @classmethod
-    def presentate_grabbed_data(cls, alias: str, data) -> str:
+    def presentate_grabbed_data(cls, alias: str, data) -> BotPost:
         groups_names = GroupDomainNameAliases.get_groups_by_alias(alias)
         prepare_strategy: VKAnswerPrepareBaseStrategy = \
             VKAnswerPrepareStrategyRegister.get_strategy_by_group_name(groups_names[0])
-        group_resp = prepare_strategy.prepare_answer(data)
-        return group_resp
+        post: BotPost = prepare_strategy.prepare_answer(data)
+        return post
 
 
 class VKAnswerPrepareBaseStrategy(ABC):
     """Base class for vk responses handle strategies"""
     @abstractmethod
-    def prepare_answer(self, data):
+    def prepare_answer(self, data: Dict) -> BotPost:
         ...
 
 
@@ -113,16 +121,16 @@ class MilongaPrepareStrategy(VKAnswerPrepareBaseStrategy):
     """In case of listening daily milongas group"""
 
     @classmethod
-    def prepare_answer(cls, data: Dict) -> str:
+    def prepare_answer(cls, data: Dict) -> BotPost:
         try:
-            group_resp: str = cls._presentate_milongas_or_err(data)
+            group_resp: BotPost = cls._presentate_milongas_or_err(data)
         except (BadRequestException, NonRegularPostResponse) as e:
             warning(e)
-            group_resp = 'No result for milongas. See terminal log.'
+            group_resp = BotPost(text='No result for milongas. See terminal log.', photo_urls=[])
         return group_resp
 
     @classmethod
-    def _presentate_milongas_or_err(cls, data: Dict):
+    def _presentate_milongas_or_err(cls, data: Dict) -> BotPost:
         """Extract polling answers from post attachment, sorts with milonga rate and returns formatted string.
         If error occurred while responding or can't find milongas inside valid response raises corresponding exception
         """
@@ -143,7 +151,7 @@ class MilongaPrepareStrategy(VKAnswerPrepareBaseStrategy):
                 name = milonga['text']
                 votes = milonga['votes']
                 ret = ''.join((ret, f'\n{name}\n{rate}% - {votes} чел.'))
-            return ret
+            return BotPost(text=ret, photo_urls=[])
         except (KeyError, IndexError) as e:
             raise NonRegularPostResponse(f'Something went wrong while parsing milongas. '
                                          f'Expected structure: [\'response\'][\'items\'][0][\'attachments\'][0]'
@@ -154,27 +162,50 @@ class OldclothersPrepareStrategy(VKAnswerPrepareBaseStrategy):
     """In case of listening free oldstuff  group"""
 
     @classmethod
-    def prepare_answer(cls, data: Dict) -> str:
+    def prepare_answer(cls, data: Dict) -> BotPost:
         try:
-            group_resp: str = cls._presentate_old_or_err(data)
+            group_resp: BotPost = cls._presentate_old_or_err(data)
         except (BadRequestException, NonRegularPostResponse) as e:
             warning(e)
-            group_resp = 'No result for oldclothers. See terminal log.'
+            group_resp = BotPost('No result for oldclothers. See terminal log.', photo_urls=[])
         return group_resp
 
     @classmethod
-    def _presentate_old_or_err(cls, data: Dict):
+    def _presentate_old_or_err(cls, data: Dict) -> BotPost:
         """Extracts text from the last post of oldclothers group
         """
         if 'error' in data:
             msg = data['error']['error_msg']
             raise BadRequestException(f'Error while requesting vk api: {msg}')
         try:
-            post_text: str = data['response']['items'][0]['text']  # text of post
-            return post_text
+            post_photos_urls: List[str] = cls._fetch_photos(data)
+            post_text: str = cls._fetch_text(data)
+            return BotPost(post_text, post_photos_urls)
         except (KeyError, IndexError) as e:
             raise NonRegularPostResponse(f'Something went wrong while parsing post. '
                                             f'Expected structure: [\'response\'][\'items\'][0][\'text\']') from e
+
+    @classmethod
+    def _fetch_photos(cls, data: Dict) -> List[str]:
+        """Returns a list of url to attached photos"""
+        photo_urls = []
+        if 'copy_history' not in data['response']['items'][0]:  # if not a repost
+            photos_number = len(data['response']['items'][0]['attachments'][0]['photo']['sizes'])
+            [photo_urls.append(data['response']['items'][0]
+                               ['attachments'][0]['photo']['sizes'][idx]['url']) for idx in range(photos_number)]
+        else:   # if repost - other structure
+            photos_number = len(data['response']['items'][0]['copy_history'][0]['attachments'][0]['photo']['sizes'])
+            [photo_urls.append(data['response']['items'][0]['copy_history'][0]
+                               ['attachments'][0]['photo']['sizes'][idx]['url']) for idx in range(photos_number)]
+        return photo_urls
+
+    @classmethod
+    def _fetch_text(cls, data: Dict) -> str:
+        if 'copy_history' not in data['response']['items'][0]:  # is not repost
+            post_text = data['response']['items'][0]['text'] or '_Post text is unavailable_'
+        else:   # is a repost
+            post_text = data['response']['items'][0]['copy_history'][0]['text'] or '_Post text is unavailable_'
+        return post_text
 
 
 class VKAnswerPrepareStrategyRegister:
@@ -195,20 +226,20 @@ class VKHandler:
         return cls.handle_vk_by_message(message)
 
     @classmethod
-    def handle_vk_by_message(cls, message: types.Message):
-        ret = ''
-        group_resp = ''
+    def handle_vk_by_message(cls, message: types.Message) -> List[BotPost]:
+        ret = []
+        group_resp = BotPost(text='No such command', photo_urls=[])
 
         # prepare keywords
         for key_word in message.text.split(sep=' '):
             alias = key_word[1:]
         # prepare query by keyword and get response
             if alias in GroupDomainNameAliases.as_list():
-                data = VKGroupGrabber.prepare_query_and_grab_data(alias)
+                data: Dict = VKGroupGrabber.prepare_query_and_grab_data(alias)
                 # presentate response
-                group_resp = VKGroupGrabber.presentate_grabbed_data(alias, data)
+                group_resp: BotPost = VKGroupGrabber.presentate_grabbed_data(alias, data)
 
-            ret = '\n'.join((ret, group_resp))
+            ret.append(group_resp)
         return ret
 
 

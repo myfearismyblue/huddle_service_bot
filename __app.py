@@ -2,9 +2,11 @@
 import logging
 
 import sys
+from typing import List
+
 sys.path.append('../venv/lib/python3.8/site-packages')
 
-from vk_services.services import GroupDomainNameAliases, VKHandler, VKGroupGrabber
+from vk_services.services import GroupDomainNameAliases, VKHandler, BotPost
 
 from aiogram import Bot, Dispatcher, executor, types
 
@@ -16,12 +18,17 @@ if __name__ == '__main__':
 
     @dp.message_handler(commands=GroupDomainNameAliases.as_list())
     async def vk_handler(message: types.Message):
-        resp = VKHandler(message)
-        await message.answer(f"{resp}")
-
-    @dp.message_handler()
-    async def echo_handler(message: types.Message):
-        await message.answer(f"Unsupportable: {message.text}")
+        """
+        Fetches a list of BotPosts from handler and forms answer for each BotPost.
+        Answers with photos and text if exists"""
+        resps: List[BotPost] = VKHandler(message)
+        for resp in resps:
+            media = types.MediaGroup()
+            for url in resp.photo_urls:
+                media.attach_photo(url)
+            if resp.photo_urls:
+                await message.answer_media_group(media)
+            await message.answer(resp.text)
 
     @dp.inline_handler()
     async def custom_handler(query):
