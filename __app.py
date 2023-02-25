@@ -16,7 +16,7 @@ if __name__ == '__main__':
 
     @dp.message_handler(commands=GroupDomainNameAliases.as_list())
     async def vk_handler(message: types.Message):
-        resp = VKHandler()(message)
+        resp = VKHandler(message)
         await message.answer(f"{resp}")
 
     @dp.message_handler()

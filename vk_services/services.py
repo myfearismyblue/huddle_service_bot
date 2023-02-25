@@ -147,10 +147,12 @@ class VKAnswerPrepareStrategyRegister:
 
 
 class VKHandler:
-    def __call__(self, message: types.Message):
-        return self.handle_vk_by_message(message)
 
-    def handle_vk_by_message(self, message: types.Message):
+    def __new__(cls, message: types.Message):
+        return cls.handle_vk_by_message(message)
+
+    @classmethod
+    def handle_vk_by_message(cls, message: types.Message):
         ret = ''
         group_resp = ''
 
@@ -160,8 +162,8 @@ class VKHandler:
         # prepare query by keyword and get response
             if alias in GroupDomainNameAliases.as_list():
                 groups_names = GroupDomainNameAliases.get_groups_by_alias(alias)
-                vk_query = self._build_vk_query(groups_names[0])          # FIXME: only the first group
-                data = self._fetch_json(vk_query)
+                vk_query = cls._build_vk_query(groups_names[0])          # FIXME: only the first group
+                data = cls._fetch_json(vk_query)
                 # presentate response
                 prepare_strategy: VKAnswerPrepareBaseStrategy = \
                     VKAnswerPrepareStrategyRegister.get_strategy_by_group_name(groups_names[0])
@@ -170,18 +172,21 @@ class VKHandler:
             ret = '\n'.join((ret, group_resp))
         return ret
 
-    def _fetch_pretty_json(self, vk_query, indent=4):
+    @classmethod
+    def _fetch_pretty_json(cls, vk_query, indent=4):
         """Fetches response and gets text as pretty json from it"""
         response = requests.get(vk_query)
         data = response.text
         json_string = json.dumps(json.loads(data), indent=indent, ensure_ascii=False).encode('utf8')
         return json_string
 
-    def _fetch_json(self, vk_query):
+    @classmethod
+    def _fetch_json(cls, vk_query):
         response = requests.get(vk_query)
         return response.json()
 
-    def _build_vk_query(self, domain_id: str):
+    @classmethod
+    def _build_vk_query(cls, domain_id: str):
         vk_query = f"{domain}/wall.get?access_token={access_token}&user_id={user_id}&" \
                    f"domain={domain_id}&count={1}&v=5.84"
         return vk_query
