@@ -63,6 +63,45 @@ class GroupDomainNameAliases:
         return list(ret)
 
 
+class VKGroupGrabber:
+
+    @classmethod
+    def _build_vk_query(cls, domain_id: str):
+        vk_query = f"{domain}/wall.get?access_token={access_token}&user_id={user_id}&" \
+                   f"domain={domain_id}&count={1}&v=5.84"
+        return vk_query
+
+    @classmethod
+    def _fetch_pretty_json(cls, vk_query, indent=4):
+        """Fetches response and gets text as pretty json from it"""
+        response = requests.get(vk_query)
+        data = response.text
+        json_string = json.dumps(json.loads(data), indent=indent, ensure_ascii=False).encode('utf8')
+        return json_string
+
+    @classmethod
+    def _fetch_json(cls, vk_query):
+        response = requests.get(vk_query)
+        return response.json()
+
+    @classmethod
+    def prepare_query_and_grab_data(cls, alias: str):
+        if alias not in GroupDomainNameAliases.as_list():
+            raise ValueError(f'Wrong {alias=}')
+        groups_names = GroupDomainNameAliases.get_groups_by_alias(alias)
+        vk_query = cls._build_vk_query(groups_names[0])  # FIXME: only the first group
+        data = cls._fetch_json(vk_query)
+        return data
+
+    @classmethod
+    def presentate_grabbed_data(cls, alias: str, data) -> str:
+        groups_names = GroupDomainNameAliases.get_groups_by_alias(alias)
+        prepare_strategy: VKAnswerPrepareBaseStrategy = \
+            VKAnswerPrepareStrategyRegister.get_strategy_by_group_name(groups_names[0])
+        group_resp = prepare_strategy.prepare_answer(data)
+        return group_resp
+
+
 class VKAnswerPrepareBaseStrategy(ABC):
     """Base class for vk responses handle strategies"""
     @abstractmethod
@@ -165,32 +204,11 @@ class VKHandler:
             alias = key_word[1:]
         # prepare query by keyword and get response
             if alias in GroupDomainNameAliases.as_list():
-                groups_names = GroupDomainNameAliases.get_groups_by_alias(alias)
-                vk_query = cls._build_vk_query(groups_names[0])          # FIXME: only the first group
-                data = cls._fetch_json(vk_query)
+                data = VKGroupGrabber.prepare_query_and_grab_data(alias)
                 # presentate response
-                prepare_strategy: VKAnswerPrepareBaseStrategy = \
-                    VKAnswerPrepareStrategyRegister.get_strategy_by_group_name(groups_names[0])
-                group_resp = prepare_strategy.prepare_answer(data)
+                group_resp = VKGroupGrabber.presentate_grabbed_data(alias, data)
 
             ret = '\n'.join((ret, group_resp))
         return ret
 
-    @classmethod
-    def _fetch_pretty_json(cls, vk_query, indent=4):
-        """Fetches response and gets text as pretty json from it"""
-        response = requests.get(vk_query)
-        data = response.text
-        json_string = json.dumps(json.loads(data), indent=indent, ensure_ascii=False).encode('utf8')
-        return json_string
 
-    @classmethod
-    def _fetch_json(cls, vk_query):
-        response = requests.get(vk_query)
-        return response.json()
-
-    @classmethod
-    def _build_vk_query(cls, domain_id: str):
-        vk_query = f"{domain}/wall.get?access_token={access_token}&user_id={user_id}&" \
-                   f"domain={domain_id}&count={1}&v=5.84"
-        return vk_query
