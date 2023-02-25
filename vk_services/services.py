@@ -91,9 +91,13 @@ class MilongaPrepareStrategy(VKAnswerPrepareBaseStrategy):
             msg = data['error']['error_msg']
             raise BadRequestException(f'Error while requesting vk api: {msg}')
         try:
+            # finds date of milonga by # char
+            date_ends_index: int = data['response']['items'][0]['text'].index('#')
+            date: str = data['response']['items'][0]['text'][:date_ends_index]
+            # finds and sorts milongas from polling
             milongas: list = data['response']['items'][0]['attachments'][0]['poll']['answers']  # list of milongas
             milongas.sort(key=lambda _: _['votes'], reverse=True)
-            ret = ''
+            ret = date
             for milonga in milongas:
                 assert isinstance(milonga, Dict)
                 rate = milonga['rate']
