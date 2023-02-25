@@ -10,20 +10,21 @@ import requests as requests
 from aiogram import types
 
 from .vk_container import domain, access_token, user_id
-from .vk_exceptions import BadRequestException, NonRegularPostResponse
+from .vk_exceptions import BadRequestException, NonRegularPostResponse, NotAppropriateContent
 
 
 class GroupDomainNameAliases:
     """
     Alternative names for vk groups names
     Usage:
-    {"group_name1": frozenset(("alias_1", "alias_2")),
-     "group_name2": frozenset(("alias_3", "alias_4")),
+    {"group_name1": frozenset(["alias_1", "alias_2"]),
+     "group_name2": frozenset(["alias_3", "alias_4"]),
     })
     """
 
-    _storage = {"milonga": frozenset(("milonga", "mil")),
-                "oldclothers": frozenset(("old", "darom")),
+    _storage = {"milonga": frozenset(["milonga", "mil"]),
+                "oldclothers": frozenset(["old", "darom"]),
+                "kvartal_tango": frozenset(["kv", ])
                 }
 
     @classmethod
@@ -208,10 +209,41 @@ class OldclothersPrepareStrategy(VKAnswerPrepareBaseStrategy):
         return post_text
 
 
+class KvartalPrepareStrategy(VKAnswerPrepareBaseStrategy):
+
+    @classmethod
+    def prepare_answer(cls, data: Dict) -> BotPost:
+        try:
+            group_resp: BotPost = cls._presentate_Kvartal_or_err(data)
+        except (BadRequestException, NonRegularPostResponse) as e:
+            warning(e)
+            group_resp = BotPost('No result for KvartalTango. See terminal log.', photo_urls=[])
+        return group_resp
+        pass
+
+    @classmethod
+    def _presentate_Kvartal_or_err(cls, data):
+        if 'error' in data:
+            msg = data['error']['error_msg']
+            raise BadRequestException(f'Error while requesting vk api: {msg}')
+        try:
+            # finds date of milonga by # char
+            text: int = data['response']['items'][0]['text'] or '_No text available'
+            # FIXME: this logic has to be separated to special filtering or fetching strategy while grabbing data
+            if all(['Время: ' in text, 'Розенштейна' in text, 'Стоимость' in text]):
+                return BotPost(text=text, photo_urls=[])
+            else:
+                raise NotAppropriateContent(f'The post doesn\'t contain info about kvartal\'s milonga')
+        except (KeyError, IndexError) as e:
+            raise NonRegularPostResponse(f'Something went wrong while parsing post. '
+                                         f'Expected structure: [\'response\'][\'items\'][0] [\'text\']') from e
+
+
 class VKAnswerPrepareStrategyRegister:
     """Register of various strategies to handle vk answer."""
     _storage = {'milonga': MilongaPrepareStrategy,
-                'oldclothers': OldclothersPrepareStrategy
+                'oldclothers': OldclothersPrepareStrategy,
+                'kvartal_tango': KvartalPrepareStrategy
     }
 
     @classmethod
