@@ -6,7 +6,7 @@ from typing import List
 
 sys.path.append('../venv/lib/python3.8/site-packages')
 
-from vk_services.services import GroupDomainNameAliases, VKHandler, BotPost
+from vk_services.services import GroupDomainNameAliases, VKHandler, BotPost, SubscriptionHandler
 
 from aiogram import Bot, Dispatcher, executor, types
 
@@ -17,18 +17,28 @@ if __name__ == '__main__':
     dp = Dispatcher(bot)
 
     @dp.message_handler(commands=GroupDomainNameAliases.as_list())
-    async def vk_handler(message: types.Message):
+    async def handle_vk(message: types.Message):
         """
         Fetches a list of BotPosts from handler and forms answer for each BotPost.
         Answers with photos and text if exists"""
-        resps: List[BotPost] = VKHandler(message)
-        for resp in resps:
+        handler = VKHandler
+        responses: List[BotPost] = handler.get_vk_responses_by_message(message)
+        for resp in responses:
             media = types.MediaGroup()
             for url in resp.photo_urls:
                 media.attach_photo(url)
             if resp.photo_urls:
                 await message.answer_media_group(media)
             await message.answer(resp.text)
+
+
+    @dp.message_handler(commands=['listen'])
+    async def start_listening(message: types.Message):
+        handler = SubscriptionHandler
+        h = handler.handle(message)
+        while True:
+            await message.answer(f'listen is running: {h.send(None)}')
+
 
     @dp.inline_handler()
     async def custom_handler(query):

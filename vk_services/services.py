@@ -1,14 +1,19 @@
+import asyncio
 import json
 from abc import ABC, abstractmethod
+from time import sleep
 from collections import namedtuple
 from dataclasses import dataclass
 from logging import warning
-from typing import Dict, List
+from threading import Thread
+from types import coroutine
+from typing import Dict, List, Tuple, Set, Iterable
 
 import requests as requests
 
 from aiogram import types
 
+import manage_db
 from .vk_container import domain, access_token, user_id
 from .vk_exceptions import BadRequestException, NonRegularPostResponse, NotAppropriateContent
 
@@ -24,7 +29,7 @@ class GroupDomainNameAliases:
 
     _storage = {"milonga": frozenset(["milonga", "mil"]),
                 "oldclothers": frozenset(["old", "darom"]),
-                "kvartal_tango": frozenset(["kv", ])
+                "kvartal_tango": frozenset(["kv", "kvartal"])
                 }
 
     @classmethod
@@ -228,7 +233,7 @@ class KvartalPrepareStrategy(VKAnswerPrepareBaseStrategy):
             raise BadRequestException(f'Error while requesting vk api: {msg}')
         try:
             # finds date of milonga by # char
-            text: int = data['response']['items'][0]['text'] or '_No text available'
+            text: str = data['response']['items'][0]['text'] or '_No text available'
             # FIXME: this logic has to be separated to special filtering or fetching strategy while grabbing data
             if all(['Время: ' in text, 'Розенштейна' in text, 'Стоимость' in text]):
                 return BotPost(text=text, photo_urls=[])
@@ -255,10 +260,11 @@ class VKAnswerPrepareStrategyRegister:
 class VKHandler:
 
     def __new__(cls, message: types.Message):
-        return cls.handle_vk_by_message(message)
+        return cls.get_vk_responses_by_message(message)
 
     @classmethod
-    def handle_vk_by_message(cls, message: types.Message) -> List[BotPost]:
+    def get_vk_responses_by_message(cls, message: types.Message) -> List[BotPost]:
+        """Parses message to find aliases and gives it to VKGroupGrabber to query vk and presentate a response"""
         ret = []
         group_resp = BotPost(text='No such command', photo_urls=[])
 
@@ -274,4 +280,68 @@ class VKHandler:
             ret.append(group_resp)
         return ret
 
+    @classmethod
+    def fetch_photo_if_exist(cls, respons: BotPost):
+        ...
+
+
+class SubscriptionHandler:
+    """Cls to handle listening of subscriptions"""
+    listen_command = '/listen'
+    update_time_sec = 3
+
+    def __new__(cls, *args, **kwargs):
+        raise NotImplementedError
+
+    @classmethod
+    def _parse_subscriptions(cls, message: types.Message) -> Set[str]:
+        """Returns a list of keywords provided in message which follows the listen_command """
+        assert message.text.startswith(cls.listen_command)
+        raw_aliases = set(message.text.strip()[len(cls.listen_command):].split(' '))
+        raw_aliases.remove('') if '' in raw_aliases else raw_aliases
+        return raw_aliases
+
+    @classmethod
+    @coroutine
+    def handle(cls, message: types.Message):
+        """For a given aliases starts listening corresponding subscriptions and sands answers"""
+
+        def _flat_2d_list(list_: Iterable[Iterable]) -> List:
+            out = []
+            for sublist in list_:
+                out.extend(sublist)
+            return out
+
+        subs_alises: Set[str] = cls._parse_subscriptions(message)
+        if not subs_alises:
+            available_subscriptions = manage_db.session.query(manage_db.Subscription).all()
+            subs = available_subscriptions
+        else:
+            given_groups = [GroupDomainNameAliases.get_groups_by_alias(alias) for alias in subs_alises]
+            groups = _flat_2d_list(given_groups)    # because an alias could correspond to various groups
+            subs = manage_db.session.query(manage_db.Subscription).\
+                filter(manage_db.Subscription.subscription_token.in_(groups)).all()
+
+        listeners = []
+        for subscription in subs:
+            # get somehow the last sent post
+            # start listening
+            listeners.append(cls._listen_subscription(subscription))
+
+        yield from listeners[0]
+
+    @classmethod
+    @coroutine
+    def _listen_subscription(cls, subscription):
+        while True:
+            last_post = None
+            fetched_data = VKGroupGrabber.prepare_query_and_grab_data(subscription.name)
+            if not fetched_data == last_post:
+                # send
+                post: BotPost = VKGroupGrabber.presentate_grabbed_data(alias=subscription.name, data=fetched_data)
+                last_post = fetched_data
+                yield post
+            else:
+                print('Fetched old')
+            sleep(cls.update_time_sec)
 
