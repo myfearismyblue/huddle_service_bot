@@ -1,14 +1,8 @@
 import logging
 
-import sys
-from typing import List, Iterable
-
-# sys.path.append('../venv/lib/python3.8/site-packages')
-
 from aiogram import Bot, Dispatcher, executor, types
 
-from domain.message_handlers import IParser, AbstractAliasRepo, ISubscriptionRequestFactory, IGrabber, Alias, \
-    SubscriptionRequest, BotPost, MessageController
+from domain.message_handlers import IParser, AbstractAliasRepo, ISubscriptionRequestFactory, IGrabber, MessageController
 from repo import AliasSubscriptionsRepo
 from services.grabbers import Grabber
 from services.parsers import SplitParser

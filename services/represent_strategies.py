@@ -83,13 +83,13 @@ class OldclothersRepresentStrategy:
         """Returns a list of url of attached photos"""
         photo_urls = []
         if 'copy_history' not in data['response']['items'][0]:  # if not a repost
-            photos_number = len(data['response']['items'][0]['attachments'][0]['photo']['sizes'])
+            photos_number = len(data['response']['items'][0]['attachments'])
             [photo_urls.append(data['response']['items'][0]
-                               ['attachments'][0]['photo']['sizes'][idx]['url']) for idx in range(photos_number)]
+                               ['attachments'][idx]['photo']['sizes'][-1]['url']) for idx in range(photos_number)]
         else:  # if repost - other structure
-            photos_number = len(data['response']['items'][0]['copy_history'][0]['attachments'][0]['photo']['sizes'])
+            photos_number = len(data['response']['items'][0]['copy_history'][0]['attachments'])
             [photo_urls.append(data['response']['items'][0]['copy_history'][0]
-                               ['attachments'][0]['photo']['sizes'][idx]['url']) for idx in range(photos_number)]
+                               ['attachments'][idx]['photo']['sizes'][-1]['url']) for idx in range(photos_number)]
         return photo_urls
 
     @classmethod
