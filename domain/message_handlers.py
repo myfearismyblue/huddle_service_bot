@@ -75,7 +75,7 @@ class ISubscriptionRequestFactory(Protocol):
         ...
 
 
-class MessageController:
+class MessageControllerFactory:
     def __init__(self, parser: IParser,
                        subscription_request_factory: ISubscriptionRequestFactory,
                        grabber: IGrabber):
