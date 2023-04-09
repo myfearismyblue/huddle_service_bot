@@ -30,7 +30,7 @@ class Subscription(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String, nullable=False)
     service = Column(Integer, ForeignKey('__Service__.id'))
-    subscription_token = Column(String, nullable=False) # id, domain, url, group_id etc to access with service's api
+    subscription_token = Column(String, nullable=False) # id, services, url, group_id etc to access with service's api
 
     users = relationship('TelegramUser', secondary=dispatch_table, back_populates='subs')
 
