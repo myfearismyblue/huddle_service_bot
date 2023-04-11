@@ -21,7 +21,7 @@ if __name__ == '__main__':
 
     message_controller = MessageControllerFactory(grabber=grabber,
                                                   parser=alias_parser,
-                                                  subscription_request_factory=subscription_request_factory).message_controller
+                                                  subscription_request_factory=subscription_request_factory)
     message_controller = dp.message_handler()(message_controller)
 
 

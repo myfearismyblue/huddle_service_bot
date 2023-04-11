@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Iterable, List, Protocol, Tuple, Set, Union, Dict, Any, TypeVar
+from typing import Iterable, List, Protocol, Tuple, Set, Union, Dict, Any, TypeVar, Coroutine
 
 from aiogram import types
 
@@ -76,6 +76,10 @@ class ISubscriptionRequestFactory(Protocol):
 
 
 class MessageControllerFactory:
+    def __call__(self, *args, **kwargs) -> Coroutine:
+        message: types.Message = args[0]
+        return self.message_controller(message)
+
     def __init__(self, parser: IParser,
                        subscription_request_factory: ISubscriptionRequestFactory,
                        grabber: IGrabber):
