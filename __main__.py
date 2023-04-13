@@ -1,6 +1,6 @@
 import logging
 
-from aiogram import Bot, Dispatcher, executor, types
+from aiogram import Bot, Dispatcher, executor
 
 from domain.message_handlers import IParser, AbstractAliasRepo, ISubscriptionRequestFactory, IGrabber, MessageControllerFactory
 from repo import AliasSubscriptionsRepo

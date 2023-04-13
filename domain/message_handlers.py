@@ -1,6 +1,6 @@
 from asyncio import sleep
 from dataclasses import dataclass
-from typing import Iterable, List, Protocol, Tuple, Set, Union, Dict, Any, TypeVar, Coroutine
+from typing import Iterable, List, Protocol, Tuple, Set, Union, Dict, Any, Coroutine, NewType
 
 from aiogram import types
 
@@ -23,11 +23,11 @@ JSONType = Union[str, int, float, bool, None, Dict[str, Any], List[Any]]
 
 
 # Type for a str becoming subscription alias
-Alias = TypeVar('Alias', bound=str)
+Alias = NewType('Alias', str)
 
 
 # The type fpr user commands
-CommandType = TypeVar('CommandType')
+CommandType = NewType('CommandType', str)
 
 
 class IGrabber(Protocol):
