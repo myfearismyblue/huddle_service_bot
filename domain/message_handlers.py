@@ -48,7 +48,7 @@ class IGrabber(Protocol):
 class IParser(Protocol):
     """Resolves user's message into reliable commands"""
 
-    def parse(self, text: str) -> Iterable[CommandType]:
+    def parse(self, text: str) -> Iterable[Alias]:
         ...
 
 

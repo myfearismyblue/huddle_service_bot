@@ -19,10 +19,13 @@ class QueryStrategyRegister:
     @classmethod
     def get_strategy_by(cls, subscription_request: SubscriptionRequest) -> QueryStrategy:
         domain: str = subscription_request.service
-        strategy: Optional[QueryStrategy] = cls._storage.get(domain)()
-        if strategy:
-            return strategy
-        raise ValueError(f'Wrong SubscriptionRequest. The query strategy for domain: {domain} is not supported.')
+        try:
+            strategy: QueryStrategy = cls._storage[domain]()
+        except KeyError as KE:
+            raise ValueError(f'Wrong SubscriptionRequest. '
+                             f'The query strategy for domain: {domain} is not supported.') from KE
+        return strategy
+
 
 
 class RepresentStrategyRegister:

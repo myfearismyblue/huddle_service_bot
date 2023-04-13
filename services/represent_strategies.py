@@ -114,7 +114,7 @@ class KvartalRepresentStrategy:
         pass
 
     @classmethod
-    def _presentate_Kvartal_or_err(cls, data):
+    def _presentate_Kvartal_or_err(cls, data: JSONType) -> BotPost:
         if 'error' in data:
             msg = data['error']['error_msg']
             raise VKBadRequestException(f'Error while requesting vk api: {msg}')

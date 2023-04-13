@@ -22,9 +22,9 @@ class AliasSubscriptionsRepo:
         all_values = set()
         {all_values.update(_) for _ in cls._storage.values()}
         len_of_unique_values = len(all_values)
-        if total_len == len_of_unique_values:
-            return
-        raise ValueError(f'Repo has ununique aliases')
+        if not total_len == len_of_unique_values:
+            raise ValueError(f'Repo has ununique aliases')
+        return None
 
     def get_subscription_info_by(self, alias: str) -> Tuple[str, str]:  # FIXME: consider return type
         """Returns service domain and subscription token by alias"""
