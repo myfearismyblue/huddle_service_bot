@@ -1,3 +1,4 @@
+from asyncio import sleep
 from dataclasses import dataclass
 from typing import Iterable, List, Protocol, Tuple, Set, Union, Dict, Any, TypeVar, Coroutine
 
@@ -78,7 +79,7 @@ class ISubscriptionRequestFactory(Protocol):
 class MessageControllerFactory:
     def __call__(self, *args, **kwargs) -> Coroutine:
         message: types.Message = args[0]
-        return self.message_controller(message)
+        return self.listen_message_controller(message)
 
     def __init__(self, parser: IParser,
                        subscription_request_factory: ISubscriptionRequestFactory,
@@ -107,3 +108,27 @@ class MessageControllerFactory:
             if resp.photo_urls:
                 await message.answer_media_group(media)
             await message.answer(resp.text)
+
+    async def listen_message_controller(self, message: types.Message, timerefresh: int = 20):
+        """
+        Responsible for a continuous listening for new subscriptions' posts
+        timerefresh: int period in seconds between services grabbing
+        """
+        assert message.text.startswith('/listen')
+        user_text: str = message.text
+        tg_user_id: int = message.from_user.id
+        parsed_commands: Iterable[Alias] = self._parser.parse(user_text)
+        subscription_requests: Iterable[SubscriptionRequest] = \
+            self._subscription_request_factory.get_subscription_request_pool(parsed_commands, tg_user_id)
+        while True:
+            responses: List[BotPost] = []
+            [responses.append(self._grabber.handle(_)) for _ in subscription_requests]
+
+            for resp in responses:
+                media = types.MediaGroup()
+                for url in resp.photo_urls:
+                    media.attach_photo(url)
+                if resp.photo_urls:
+                    await message.answer_media_group(media)
+                await message.answer(resp.text)
+            await sleep(timerefresh)
