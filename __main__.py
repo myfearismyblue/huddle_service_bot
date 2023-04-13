@@ -14,15 +14,23 @@ if __name__ == '__main__':
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher(bot)
 
-    alias_parser: IParser = ListenParser()
-    alias_repo: AbstractAliasRepo = AliasSubscriptionsRepo()
-    subscription_request_factory: ISubscriptionRequestFactory = SubscriptionRequestFactory(repo=alias_repo)
-    grabber: IGrabber = Grabber(QueryStrategyRegister, RepresentStrategyRegister)
+    command = 'listen'
+    listen_message_controller = MessageControllerFactory(
+        grabber=Grabber(QueryStrategyRegister, RepresentStrategyRegister),
+        parser=ListenParser(),
+        subscription_request_factory=SubscriptionRequestFactory(repo=AliasSubscriptionsRepo()),
+        command=command)
 
-    message_controller = MessageControllerFactory(grabber=grabber,
-                                                  parser=alias_parser,
-                                                  subscription_request_factory=subscription_request_factory)
-    message_controller = dp.message_handler(commands=['listen'])(message_controller)
+    listen_message_controller = dp.message_handler(commands=[command])(listen_message_controller)
+
+    command = ''
+    message_controller = MessageControllerFactory(
+        grabber=Grabber(QueryStrategyRegister, RepresentStrategyRegister),
+        parser=SplitParser(),
+        subscription_request_factory=SubscriptionRequestFactory(repo=AliasSubscriptionsRepo()),
+        command=command)
+
+    message_controller = dp.message_handler()(message_controller)
 
 
     async def on_startup(_):

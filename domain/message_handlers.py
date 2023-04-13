@@ -79,14 +79,16 @@ class ISubscriptionRequestFactory(Protocol):
 class MessageControllerFactory:
     def __call__(self, *args, **kwargs) -> Coroutine:
         message: types.Message = args[0]
-        return self.listen_message_controller(message)
+        return self._register[self._command](self, message)
 
     def __init__(self, parser: IParser,
                        subscription_request_factory: ISubscriptionRequestFactory,
-                       grabber: IGrabber):
+                       grabber: IGrabber,
+                       command: str =''):
         self._parser = parser
         self._subscription_request_factory = subscription_request_factory
         self._grabber = grabber
+        self._command = command
 
     async def message_controller(self, message: types.Message):
         """
@@ -132,3 +134,7 @@ class MessageControllerFactory:
                     await message.answer_media_group(media)
                 await message.answer(resp.text)
             await sleep(timerefresh)
+
+    # {'command': self.foobar_controller}
+    _register = {'': message_controller,
+                 'listen': listen_message_controller}
