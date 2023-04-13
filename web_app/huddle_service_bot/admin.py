@@ -13,6 +13,10 @@ class SubscriptionAliasAdmin(admin.ModelAdmin):
     get_service.short_description = Service._meta.verbose_name
 
 
+class TelegramUserInline(admin.TabularInline):
+    model = Subscription.users.through
+
+
 class SubscriptionAliasInline(admin.TabularInline):
     model = SubscriptionAlias
 
@@ -20,7 +24,7 @@ class SubscriptionAliasInline(admin.TabularInline):
 @admin.register(Subscription)
 class SubscriptionAdmin(admin.ModelAdmin):
     list_display = ['subscription_token', 'service',]
-    inlines = [SubscriptionAliasInline]
+    inlines = [SubscriptionAliasInline, TelegramUserInline]
 
 
 class SubscriptionInline(admin.TabularInline):
@@ -35,5 +39,13 @@ class ServiceAdmin(admin.ModelAdmin):
 
 @admin.register(TelegramUser)
 class TelegramUserAdmin(admin.ModelAdmin):
-    list_display = ['telegram_id', ]
+    list_display = ['telegram_id', 'get_subscriptions',]
+
+    def get_subscriptions(self, obj):
+        return [_[1] for _ in obj.subscriptions.values_list()]
+
+    get_subscriptions.short_description = Subscription._meta.verbose_name_plural
+
+
+
 
