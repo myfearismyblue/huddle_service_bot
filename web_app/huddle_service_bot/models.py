@@ -30,7 +30,7 @@ class Subscription(models.Model):
 class TelegramUser(models.Model):
     id = models.IntegerField(primary_key=True, auto_created=True)
     telegram_id = models.IntegerField(unique=True, verbose_name = 'TelegramUser')
-    subscriptions = models.ManyToManyField(Subscription, related_name='users')
+    subscriptions = models.ManyToManyField(Subscription, related_name='telegram_users', through='LastPostForUser')
 
     def __str__(self):
         return f'{self.telegram_id}'
@@ -53,3 +53,9 @@ class SubscriptionAlias(models.Model):
         verbose_name = 'Alias'
         verbose_name_plural = 'Aliases'
         ordering = ['subscription',]
+
+
+class LastPostForUser(models.Model):
+    subscription = models.ForeignKey(Subscription, null=False, blank=False, on_delete=models.CASCADE)
+    telegram_user = models.ForeignKey(TelegramUser, blank=False, null=False, on_delete=models.CASCADE)
+    last_post_id = models.CharField(max_length=256, null=True, blank=True)
