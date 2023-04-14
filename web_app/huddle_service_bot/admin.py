@@ -47,7 +47,7 @@ class ServiceAdmin(admin.ModelAdmin):
 
 @admin.register(TelegramUser)
 class TelegramUserAdmin(admin.ModelAdmin):
-    list_display = ['telegram_id', 'get_subscriptions', ]
+    list_display = ['telegram_id', 'name', 'get_subscriptions', ]
     inlines = [LastPostForUserInline, ]
 
     def get_subscriptions(self, obj):
