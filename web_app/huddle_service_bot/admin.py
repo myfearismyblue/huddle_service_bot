@@ -3,22 +3,19 @@ from django.contrib import admin
 from .models import Service, Subscription, TelegramUser, SubscriptionAlias, LastPostForUser
 
 
-@admin.register(SubscriptionAlias)
-class SubscriptionAliasAdmin(admin.ModelAdmin):
-    list_display = ['alias', 'subscription', 'get_service', ]
-
-    def get_service(self, obj):
-        return obj.subscription.service
-
-    get_service.short_description = Service._meta.verbose_name
-
-
 class TelegramUserInline(admin.TabularInline):
     model = Subscription.telegram_users.through
+    extra = 1
 
 
 class SubscriptionAliasInline(admin.TabularInline):
     model = SubscriptionAlias
+    extra = 1
+
+
+class SubscriptionInline(admin.TabularInline):
+    model = Subscription
+    extra = 1
 
 
 class LastPostForUserInline(admin.TabularInline):
@@ -31,12 +28,7 @@ class SubscriptionAdmin(admin.ModelAdmin):
     list_display = ['subscription_token', 'service', ]
     inlines = [SubscriptionAliasInline,
                TelegramUserInline,
-               LastPostForUserInline,
                ]
-
-
-class SubscriptionInline(admin.TabularInline):
-    model = Subscription
 
 
 @admin.register(Service)
@@ -54,3 +46,13 @@ class TelegramUserAdmin(admin.ModelAdmin):
         return [_[1] for _ in obj.subscriptions.values_list()]
 
     get_subscriptions.short_description = Subscription._meta.verbose_name_plural
+
+
+@admin.register(SubscriptionAlias)
+class SubscriptionAliasAdmin(admin.ModelAdmin):
+    list_display = ['alias', 'subscription', 'get_service', ]
+
+    def get_service(self, obj):
+        return obj.subscription.service
+
+    get_service.short_description = Service._meta.verbose_name
