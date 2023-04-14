@@ -9,7 +9,7 @@ https://docs.djangoproject.com/en/4.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.2/ref/settings/
 """
-
+from logging import warning
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -30,6 +30,19 @@ ALLOWED_HOSTS = []
 
 # Application definition
 
+# FIXME: Make this code dry. place it on upper project level and import
+# in order to manage proper app name which depends on entry point where django.setup() have been called
+# 'web_app.web_app.test1.test2' -> 'web_app.test1.test2'
+tmp = __package__
+package_path_tail: str = '.'.join(tmp.split('.')[1:])   # '' if no . in __package__
+
+bot_web_app_name = '.'.join((package_path_tail, 'huddle_service_bot'))  # .huddle_service_bot if . hasn't been found
+# need only huddle_service_bot
+bot_web_app_name = bot_web_app_name[1:] if bot_web_app_name.startswith('.') else bot_web_app_name
+
+if __package__ not in ('web_app.web_app', 'web_app'):
+    warning(f'Entry point to orm is: {__package__=}')
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -37,7 +50,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'huddle_service_bot',
+    bot_web_app_name,
 ]
 
 MIDDLEWARE = [

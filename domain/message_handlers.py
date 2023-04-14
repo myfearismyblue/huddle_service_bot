@@ -1,3 +1,14 @@
+__all__ = ['SubscriptionRequest',
+           'BotPost',
+           'JSONType',
+           'Alias',
+           'CommandType',
+           'IGrabber',
+           'IParser',
+           'AbstractAliasRepo',
+           'ISubscriptionRequestFactory',
+           'MessageControllerFactory',
+           ]
 from asyncio import sleep
 from dataclasses import dataclass
 from typing import Iterable, List, Protocol, Tuple, Set, Union, Dict, Any, Coroutine, NewType
@@ -135,6 +146,14 @@ class MessageControllerFactory:
                 await message.answer(resp.text)
             await sleep(timerefresh)
 
-    # {'command': self.foobar_controller}
+
+    async def all_subscriptions_message_controller(self, message: types.Message):
+        """Gets all available subscriptions from db"""
+        assert message.text.startswith('/all')
+        user_text: str = message.text
+        tg_user_id: int = message.from_user.id
+
+
     _register = {'': message_controller,
-                 'listen': listen_message_controller}
+                 'listen': listen_message_controller,
+                 'all': all_subscriptions_message_controller, }
