@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 __all__ = ['SubscriptionRequest',
            'BotPost',
            'JSONType',
@@ -6,12 +8,15 @@ __all__ = ['SubscriptionRequest',
            'IGrabber',
            'IParser',
            'AbstractAliasRepo',
+           'AbstractUoW',
            'ISubscriptionRequestFactory',
            'MessageControllerFactory',
            ]
+
+from abc import ABC, abstractmethod
 from asyncio import sleep
 from dataclasses import dataclass
-from typing import Iterable, List, Protocol, Tuple, Set, Union, Dict, Any, Coroutine, NewType
+from typing import Iterable, List, Protocol, Tuple, Set, Union, Dict, Any, Coroutine, NewType, Optional
 
 from aiogram import types
 
@@ -29,16 +34,18 @@ class BotPost:
     text: str
     photo_urls: List[str]
 
+
 # Custom JSON type to clarify various methods return
 JSONType = Union[str, int, float, bool, None, Dict[str, Any], List[Any]]
 
-
-# Type for a str becoming subscription alias
-Alias = NewType('Alias', str)
-
-
 # The type fpr user commands
 CommandType = NewType('CommandType', str)
+
+
+# Type for a str becoming subscription alias
+# Alias = NewType('Alias', str)
+class Alias(CommandType):
+    ...  # FIXME
 
 
 class IGrabber(Protocol):
@@ -65,6 +72,8 @@ class IParser(Protocol):
 
 class AbstractAliasRepo(Protocol):
     """Abstract repo to determine subscription alias managing interface"""
+    model_name: str
+
     def get_subscription_info_by(self, alias: str) -> Tuple[str, str]:  # FIXME: consider return type
         """Returns service services and subscription token by alias"""
         ...
@@ -74,12 +83,25 @@ class AbstractAliasRepo(Protocol):
         ...
 
 
+class AbstractUoW(ABC):
+    storage: Optional[AbstractAliasRepo]
+
+    def __enter__(self) -> AbstractUoW:
+        return self
+
+    @abstractmethod
+    def __exit__(self, *args):
+        ...
+
+
 class ISubscriptionRequestFactory(Protocol):
-    def __init__(self, repo: AbstractAliasRepo) -> None:
+    def __init__(self, uow: AbstractUoW) -> None:
         """Need to know where to get info about subscriptions"""
         ...
 
-    def get_subscription_request_pool(self, commands: Iterable[CommandType], tg_user_id: int) -> Iterable[SubscriptionRequest]:
+    def get_subscription_request_pool(self,
+                                      commands: Iterable[CommandType],
+                                      tg_user_id: int) -> Iterable[SubscriptionRequest]:
         """
         Creates an iterable of SubscriptionRequest objects which are corresponds to the given commands
         from one telegram user
@@ -93,9 +115,9 @@ class MessageControllerFactory:
         return self._register[self._command](self, message)
 
     def __init__(self, parser: IParser,
-                       subscription_request_factory: ISubscriptionRequestFactory,
-                       grabber: IGrabber,
-                       command: str =''):
+                 subscription_request_factory: ISubscriptionRequestFactory,
+                 grabber: IGrabber,
+                 command: str = ''):
         self._parser = parser
         self._subscription_request_factory = subscription_request_factory
         self._grabber = grabber
@@ -146,13 +168,11 @@ class MessageControllerFactory:
                 await message.answer(resp.text)
             await sleep(timerefresh)
 
-
     async def all_subscriptions_message_controller(self, message: types.Message):
         """Gets all available subscriptions from db"""
         assert message.text.startswith('/all')
         user_text: str = message.text
         tg_user_id: int = message.from_user.id
-
 
     _register = {'': message_controller,
                  'listen': listen_message_controller,

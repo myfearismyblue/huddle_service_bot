@@ -2,23 +2,27 @@ import logging
 
 from aiogram import Bot, Dispatcher, executor
 
-from domain.message_handlers import IParser, AbstractAliasRepo, ISubscriptionRequestFactory, IGrabber, MessageControllerFactory
+from domain import MessageControllerFactory, AbstractUoW, AbstractAliasRepo
 from repo import AliasSubscriptionsRepo
 from services.grabbers import Grabber
 from services.parsers import SplitParser, ListenParser
 from services.strategy_registers import QueryStrategyRegister, RepresentStrategyRegister
 from services.subscription_request_factories import SubscriptionRequestFactory
+from services.unit_of_work import DjangoUoW
 from tokens import HUDDLE_SERVICE_BOT_TOKEN as BOT_TOKEN
 
 if __name__ == '__main__':
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher(bot)
 
+    alias_repo: type[AbstractAliasRepo] = AliasSubscriptionsRepo
+    uow: AbstractUoW = DjangoUoW(AliasSubscriptionsRepo)
+
     command = 'listen'
     listen_message_controller = MessageControllerFactory(
         grabber=Grabber(QueryStrategyRegister, RepresentStrategyRegister),
         parser=ListenParser(),
-        subscription_request_factory=SubscriptionRequestFactory(repo=AliasSubscriptionsRepo()),
+        subscription_request_factory=SubscriptionRequestFactory(uow=uow),
         command=command)
 
     listen_message_controller = dp.message_handler(commands=[command])(listen_message_controller)
@@ -27,7 +31,7 @@ if __name__ == '__main__':
     message_controller = MessageControllerFactory(
         grabber=Grabber(QueryStrategyRegister, RepresentStrategyRegister),
         parser=SplitParser(),
-        subscription_request_factory=SubscriptionRequestFactory(repo=AliasSubscriptionsRepo()),
+        subscription_request_factory=SubscriptionRequestFactory(uow=uow),
         command=command)
 
     message_controller = dp.message_handler()(message_controller)

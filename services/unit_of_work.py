@@ -1,37 +1,35 @@
-from __future__ import annotations
-
-from abc import ABC, abstractmethod
+from typing import Optional
 
 import domain
-import repo
-
-
-class AbstractUoW(ABC):
-    storage: domain.AbstractAliasRepo
-
-    def __enter__(self) -> AbstractUoW:
-        return self
-
-    @abstractmethod
-    def __exit__(self, *args):
-        ...
-
 
 DEFAULT_DJANGO_SETTINGS = "web_app.web_app.settings"
 
 
-class DjangoUoW(AbstractUoW):
+class DjangoUoW(domain.AbstractUoW):
+    import django
 
-    def __init__(self, settings: str = DEFAULT_DJANGO_SETTINGS, repository=repo.AliasSubscriptionsRepo()):
+    def __init__(self,
+                 repository: type(domain.AbstractAliasRepo),
+                 settings: str = DEFAULT_DJANGO_SETTINGS,
+                 ):
         self._django_settings: str = settings
-        self.storage: domain.AbstractAliasRepo = repository
+        self.storage_cls: type[domain.AbstractAliasRepo] = repository
+        self.__storage: Optional[domain.AbstractAliasRepo] = None
 
-    def __enter__(self) -> AbstractUoW:
+    @property
+    def storage(self) -> domain.AbstractAliasRepo:
+        if self.__storage is None:
+            raise AssertionError(f'Repository should be managed only with context manager')
+        return self.__storage
+
+    def __enter__(self) -> domain.AbstractUoW:
         import os
-        import django
-        self.django = django
         os.environ.setdefault("DJANGO_SETTINGS_MODULE", self._django_settings)
-        django.setup()
+        os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "True")
+        self.django.setup()
+        from web_app.huddle_service_bot import models
+        model = getattr(models, self.storage_cls.model_name)
+        self.__storage = self.storage_cls(model)
         return super().__enter__()
 
     def __exit__(self, *args):
