@@ -3,8 +3,10 @@ from typing import Tuple, Set
 
 from django.db import models
 
+from domain.message_handlers import AbstractSubscriptionRepo, AbstractAliasRepo
 
-class AliasSubscriptionsRepo:
+
+class AliasSubscriptionsRepo(AbstractAliasRepo):
     """Concrete implementation of AbstractAliasRepo"""
     model_name: str = 'SubscriptionAlias'
 
@@ -26,3 +28,14 @@ class AliasSubscriptionsRepo:
     def all_aliases_as_set(self) -> Set[str]:
         """Return all stored aliases as set"""
         return {_.alias for _ in self._model.objects.all()}
+
+
+class SubscriptionRepo(AbstractSubscriptionRepo):
+    """Repository responsible for managing Subscription django model """
+    model_name = 'Subscription'
+
+    def __init__(self, model: models.Model):
+        self._model = model
+
+    def get_all_subscriptions_as_set(self) -> Set[str]:
+        return {_.subscription_token for _ in self._model.objects.all()}

@@ -7,6 +7,8 @@ __all__ = ['SubscriptionRequest',
            'CommandType',
            'IGrabber',
            'IParser',
+           'AbstractRepo',
+           'AbstractSubscriptionRepo',
            'AbstractAliasRepo',
            'AbstractUoW',
            'ISubscriptionRequestFactory',
@@ -23,7 +25,7 @@ from aiogram import types
 
 @dataclass
 class SubscriptionRequest:
-    service: str  # service with api
+    service: Optional[str]  # service with api
     subscription_token: str  # id, domain, group_id etc. to use with the service
     tg_user_id: int  # telegram user id
 
@@ -41,11 +43,8 @@ JSONType = Union[str, int, float, bool, None, Dict[str, Any], List[Any]]
 # The type fpr user commands
 CommandType = NewType('CommandType', str)
 
-
 # Type for a str becoming subscription alias
-# Alias = NewType('Alias', str)
-class Alias(CommandType):
-    ...  # FIXME
+Alias = NewType('Alias', str)
 
 
 class IGrabber(Protocol):
@@ -70,21 +69,34 @@ class IParser(Protocol):
         ...
 
 
-class AbstractAliasRepo(Protocol):
-    """Abstract repo to determine subscription alias managing interface"""
+class AbstractRepo(ABC):
     model_name: str
 
+
+class AbstractAliasRepo(AbstractRepo):
+    """Abstract repo to determine subscription alias managing interface"""
+
+    @abstractmethod
     def get_subscription_info_by(self, alias: str) -> Tuple[str, str]:  # FIXME: consider return type
         """Returns service services and subscription token by alias"""
         ...
 
+    @abstractmethod
     def all_aliases_as_set(self) -> Set[str]:
         """Returns all stored aliases as set"""
         ...
 
 
+class AbstractSubscriptionRepo(AbstractRepo):
+    """Abstract repo to determine subscription handling interface """
+
+    @abstractmethod
+    def get_all_subscriptions_as_set(self) -> Set[str]:
+        ...
+
+
 class AbstractUoW(ABC):
-    storage: Optional[AbstractAliasRepo]
+    storage: Optional[AbstractRepo]
 
     def __enter__(self) -> AbstractUoW:
         return self
@@ -171,8 +183,22 @@ class MessageControllerFactory:
     async def all_subscriptions_message_controller(self, message: types.Message):
         """Gets all available subscriptions from db"""
         assert message.text.startswith('/all')
-        user_text: str = message.text
+        user_text: str = message.text  # reserved for future options
         tg_user_id: int = message.from_user.id
+        parsed_commands: Iterable[Alias] = self._parser.parse(user_text)
+        subscription_requests: Iterable[SubscriptionRequest] = \
+            self._subscription_request_factory.get_subscription_request_pool(parsed_commands, tg_user_id)
+
+        responses: List[BotPost] = []
+        [responses.append(self._grabber.handle(_)) for _ in subscription_requests]
+
+        for resp in responses:
+            media = types.MediaGroup()
+            for url in resp.photo_urls:
+                media.attach_photo(url)
+            if resp.photo_urls:
+                await message.answer_media_group(media)
+            await message.answer(resp.text)
 
     _register = {'': message_controller,
                  'listen': listen_message_controller,

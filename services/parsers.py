@@ -13,7 +13,8 @@ class SplitParser:
     def parse(self, text: str) -> Iterable[Alias]:
         if not isinstance(text, str):
             raise TypeError(f'Wrong input type: {type(text)}. Should be str')
-        aliases = set(text[1:].split())  # split with space. trimmed. no empty strings. 'a  a  c   b   ' -> {'a', 'b', 'c'}
+        # split with space. trimmed. no empty strings. {'a  a  c   b   ' -> {'a', 'b', 'c'}
+        aliases = set(text.strip('/').split())
         return aliases
 
 
